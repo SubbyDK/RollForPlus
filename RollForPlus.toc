@@ -1,0 +1,14 @@
+## Title: |cFFFFCC00RollFor+|r|cFF00FF00 by Reillos & Subby|r
+## Interface: 11200
+## Author: Reillos & Subby
+## Version: 0.1
+## DefaultState: enabled
+## Dependencies: RollFor
+## Notes: Add a plus on same soft resrve.
+## X-Website: https://github.com/pepopo978/BigWigs/
+
+## SavedVariables: 
+## SavedVariablesPerCharacter: PlusTableDB
+
+Libs\LibStub\LibStub.lua
+RollForPlus.lua
