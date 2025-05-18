@@ -3,8 +3,10 @@
 -- =                                   All the locals we need here.                                   =
 -- ====================================================================================================
 
-local Debug = true                             -- For debugging.
+local Debug = false                             -- For debugging.
 local AddToRoll = 10                            -- How much there will be added to the roll each time.
+local RaidPlace                                 -- The name of the raid we are checking.
+local ReserverName                              -- Used when we loop through RollFor info to get the name.
 
 
 -- ====================================================================================================
@@ -41,123 +43,183 @@ end
 
 
 -- ====================================================================================================
--- =                     Convert the RollFor text to to a table we can work with.                     =
+-- =                           Check if we have to add any plus to the info                           =
 -- ====================================================================================================
 
--- Function to decode Base64 encoded text from a "RollFor" string.
-local function DecodeBase64TextFromRollFor(textString)
+--
+local function CheckForPlus(raidData)
+    -- Check if we received any raid data.
+    if (raidData) then
 
-  -- String containing all valid Base64 characters
-  local base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+        -- Make sure PlusTableDB is made.
+        if (not PlusTableDB) or (not type(PlusTableDB) == "table") then
+            PlusTableDB = {}
+        end
 
-  -- Inner function to decode a Base64 string
-  local function decode_base64(data)
-    -- Check if the input data is nil or falsey
-    if not data then
-      return nil  -- Return nil if no data is provided
-    end
+        -- Check and save instance name.
+        if (raidData.metadata) and (raidData.metadata.instances) then
+            for _, instanceName in ipairs(raidData.metadata.instances) do
+                -- Save the name of the raid.
+                RaidPlace = instanceName
+            end
+        else
+            editBoxExport:SetText("No instance information found.");
+            return;
+        end
 
-    -- Remove any characters from the input that are not valid Base64 characters or padding (=)
-    data = string.gsub(data, "[^" .. base64_chars .. "=]", "")
+        -- Check and display soft reserves information
+        if (raidData.softreserves) then
+            -- Iterate through each soft reserve entry (each player).
+            for _, reserve in ipairs(raidData.softreserves) do
+                ReserverName = reserve.name
+                -- Check if the current player has any items listed in their soft reserves.
+                if (reserve.items) then
+                    -- Iterate through each item in the player's soft reserves.
+                    for _, item in ipairs(reserve.items) do
 
-    -- Perform two nested string substitutions to decode the Base64 data
-    return string.gsub(string.gsub(data, ".", function(x)
-      -- This inner gsub converts each Base64 character to its 6-bit binary representation
+                        -- Make sure we have a table for this raid.
+                        if (not PlusTableDB[RaidPlace]) then
+                            PlusTableDB[RaidPlace] = {}
+                        end
+                        -- Make sure we have a table for this person.
+                        if (not PlusTableDB[RaidPlace][ReserverName]) then
+                            PlusTableDB[RaidPlace][ReserverName] = { Items = {} }
+                        end
 
-      if (x == "=") then
-        return ""  -- Remove padding characters ('=')
-      end
+                        -- Check if the item ID is already reserved by this person.
+                        local alreadyReserved = false
+                        for _, reservedItem in ipairs(PlusTableDB[RaidPlace][ReserverName].Items) do
+                            if reservedItem.id == item.id then
+                                -- Add a plus.
+                                DEFAULT_CHAT_FRAME:AddMessage(item.sr_plus)
+                                alreadyReserved = true
+                                break
+                            end
+                        end
 
-      local r, f = "", (string.find(base64_chars, x) - 1)  -- Find the index (0-63) of the Base64 character in the base64_chars string
-      -- r: the result (binary string), f: the index of the base64 character
+                        if (not alreadyReserved) then
+                            -- It's a new item, add it to the table.
+                            table.insert(PlusTableDB[RaidPlace][ReserverName].Items, item.id)
+                        end
+                        -- If it's already reserved, we do nothing (as per your original empty else).
+                        
+                        -- table.insert(PlusTableDB[RaidPlace][ReserverName].Items, item.id)
+                        
 
-      -- Iterate from 6 down to 1 to extract each of the 6 bits
-      for i = 6, 1, -1 do
-        -- Calculate if the i-th bit is set (1) or not (0) using modulo and powers of 2
-        r = r .. (math.mod(f, 2 ^ i) - math.mod(f, 2 ^ (i - 1)) > 0 and "1" or "0")
-        -- math.mod(f, 2^i) gets the remainder when f is divided by 2^i
-        -- subtracting math.mod(f, 2^(i-1)) isolates the i-th bit.
-        -- if the result > 0, the bit is 1, otherwise 0
-      end
-      return r  -- Return the 6-bit binary string
-    end), "%d%d%d?%d?%d?%d?%d?%d?", function(x)
-      -- This outer gsub converts 8-bit binary strings to their corresponding ASCII characters
-      -- %d represents a digit (0-9), the ? makes the preceding digit optional
 
-      if (string.len(x) ~= 8) then
-        return ""  -- Return empty string for incomplete 8-bit sequences (due to padding)
-      end
-
-      local c = 0  -- Initialize the decimal value of the byte
-      -- Iterate through the 8 bits of the binary string
-      for i = 1, 8 do
-        -- Calculate the decimal value by adding the corresponding power of 2 if the bit is '1'
-        c = c + (string.sub(x, i, i) == "1" and 2 ^ (8 - i) or 0)
-        -- string.sub(x, i, i) gets the i-th character of x
-        -- if it's "1", add 2^(8-i) to c.
-      end
-      return string.char(c)  -- Convert the decimal value to its ASCII character
-    end)
-  end
-
-    -- The Base64 encoded string to decode (passed as argument to the function)
-    local encoded_data = textString
-
-    -- Decode the Base64 string
-    local decoded_json_string = decode_base64(encoded_data)
-
-    -- 
-    if (decoded_json_string) then
-        DEFAULT_CHAT_FRAME:AddMessage("Base64 Decoded JSON String:")
-        -- Print the decoded JSON string
-        DEFAULT_CHAT_FRAME:AddMessage(decoded_json_string)
-
-        -- Attempt to decode the JSON string into a Lua table (you'll need a JSON library)
-        -- Assuming you have a JSON library like "Json-0.1.2"
-        local json = LibStub("Json-0.1.2")
-        -- 
-        if (json) then
-            -- Use pcall for safe JSON decoding
-            local success, decoded_table = pcall(json.decode, decoded_json_string)
-            -- success: boolean indicating if decoding was successful
-            -- decoded_table: the decoded table, or an error message if decoding failed
-            if (success) then
-                DEFAULT_CHAT_FRAME:AddMessage("JSON Decoded Table:")
-                -- Function to print nested tables
-                local function print_table(t, indent)
-                    -- Default indent is empty string
-                    indent = indent or ""
-                    -- Iterate through key-value pairs in the table
-                    for k, v in pairs(t) do
-                        -- If the value is a table (nested structure)
-                        if type(v) == "table" then
-                        -- Print the key
-                            DEFAULT_CHAT_FRAME:AddMessage(indent .. tostring(k) .. ": ")
-                            -- Recursively call print_table with increased indent
-                            print_table(v, indent .. "  ")
+                        if (item.sr_plus) then
+                            --DEFAULT_CHAT_FRAME:AddMessage(ReserverName .. " - " .. RaidPlace .. "  Item ID: " .. item.id .. ", Quality: " .. item.quality .. ", Plus: " .. item.sr_plus);
                         else
-                            -- Print key-value pair
-                            DEFAULT_CHAT_FRAME:AddMessage(indent .. tostring(k) .. ": " .. tostring(v))
+                            --DEFAULT_CHAT_FRAME:AddMessage(ReserverName .. " - " .. RaidPlace .. "  Item ID: " .. item.id .. ", Quality: " .. item.quality);
                         end
                     end
                 end
-                print_table(decoded_table)  -- Call the function to print the decoded table
-                --editBoxExport:SetText("Done")
-                DEFAULT_CHAT_FRAME:AddMessage(decoded_table)
-            else
-                -- Print the error message
-                DEFAULT_CHAT_FRAME:AddMessage("Error decoding JSON: " .. decoded_table)
             end
-        else
-            -- Print message if JSON library is not found
-            DEFAULT_CHAT_FRAME:AddMessage("Json-0.1.2 library not found.  Cannot decode JSON.")
         end
+        -- For test
+        editBoxExport:SetText("Soft reserves and instances displayed.");
+    -- If no raid data was received.
     else
-        -- Print message if Base64 decoding failed
-        DEFAULT_CHAT_FRAME:AddMessage("Base64 Decoding Failed!")
+        editBoxExport:SetText("No raid data received.");
     end
 end
 
+-- ====================================================================================================
+-- =                    Convert the RollFor text to to something we can work with.                    =
+-- ====================================================================================================
+
+-- Your provided Base64 decoding function
+local function DecodeBase64Text(textString)
+    -- String containing all valid Base64 characters
+    local base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+
+    -- Inner function to decode a Base64 string
+    local function decode_base64(data)
+        -- Check if the input data is nil or falsey
+        if (not data) then
+            return nil -- Return nil if no data is provided
+        end
+
+        -- Remove any characters from the input that are not valid Base64 characters or padding (=)
+        data = string.gsub(data, "[^" .. base64_chars .. "=]", "")
+
+        -- Perform two nested string substitutions to decode the Base64 data
+        return string.gsub(string.gsub(data, ".", function(x)
+            -- This inner gsub converts each Base64 character to its 6-bit binary representation
+
+            if (x == "=") then
+                return "" -- Remove padding characters ('=')
+            end
+
+            local r, f = "", (string.find(base64_chars, x) - 1) -- Find the index (0-63) of the Base64 character in the base64_chars string
+            -- r: the result (binary string), f: the index of the base64 character
+
+            -- Iterate from 6 down to 1 to extract each of the 6 bits
+            for i = 6, 1, -1 do
+                -- Calculate if the i-th bit is set (1) or not (0) using modulo and powers of 2
+                r = r .. (math.mod(f, 2 ^ i) - math.mod(f, 2 ^ (i - 1)) > 0 and "1" or "0")
+                -- math.mod(f, 2^i) gets the remainder when f is divided by 2^i
+                -- subtracting math.mod(f, 2^(i-1)) isolates the i-th bit.
+                -- if the result > 0, the bit is 1, otherwise 0
+            end
+            return r -- Return the 6-bit binary string
+        end), "%d%d%d?%d?%d?%d?%d?%d?", function(x)
+            -- This outer gsub converts 8-bit binary strings to their corresponding ASCII characters
+            -- %d represents a digit (0-9), the ? makes the preceding digit optional
+
+            if (string.len(x) ~= 8) then
+                return "" -- Return empty string for incomplete 8-bit sequences (due to padding)
+            end
+
+            local c = 0 -- Initialize the decimal value of the byte
+            -- Iterate through the 8 bits of the binary string
+            for i = 1, 8 do
+                -- Calculate the decimal value by adding the corresponding power of 2 if the bit is '1'
+                c = c + (string.sub(x, i, i) == "1" and 2 ^ (8 - i) or 0)
+                -- string.sub(x, i, i) gets the i-th character of x
+                -- if it's "1", add 2^(8-i) to c.
+            end
+            return string.char(c) -- Convert the decimal value to its ASCII character
+        end)
+    end
+
+    return decode_base64(textString)
+
+end
+
+-- ====================================================================================================
+-- =                                                               =
+-- ====================================================================================================
+
+-- Function to decode Base64, then JSON, and send metadata to CheckForPlus
+local function SendMetaDataToCheckForPlus(encodedString)
+
+    -- Get the decoded info we need.
+    local decodedJsonString = DecodeBase64Text(encodedString)
+
+    -- Did we get any info ?
+    if (decodedJsonString) then
+        -- 
+        local json = LibStub("Json-0.1.2")
+        -- Is json loaded ?
+        if (json) then
+            -- 
+            local success, decodedTable = pcall(json.decode, decodedJsonString)
+            -- Now we check if the whole table decoded
+            if (success) and (decodedTable) then
+                -- Send the entire table
+                CheckForPlus(decodedTable)
+            -- 
+            elseif (not success) then
+                DEFAULT_CHAT_FRAME:AddMessage("Error decoding JSON: " .. decodedTable)
+            end
+        else
+            DEFAULT_CHAT_FRAME:AddMessage("Error: Json-0.1.2 library not found.")
+        end
+    else
+        DEFAULT_CHAT_FRAME:AddMessage("Error: Base64 decoding failed.")
+    end
+end
 
 -- ====================================================================================================
 -- =                                          The interface.                                          =
@@ -257,7 +319,7 @@ local editBoxImport = CreateFrame("EditBox", "RollForImport", ImportScrollFrame)
     scrollframeImport:SetScrollChild(editBoxImport);
 
     -- For easy testing
-    editBoxImport:SetText("eyJtZXRhZGF0YSI6eyJpZCI6IlRDVEczVyIsImluc3RhbmNlIjoxMDEsImluc3RhbmNlcyI6WyJMb3dlciBLYXJhemhhbiBIYWxscyJdLCJvcmlnaW4iOiJyYWlkcmVzIn0sInNvZnRyZXNlcnZlcyI6W3sibmFtZSI6IkxldG1lYmxlZWQiLCJpdGVtcyI6W3siaWQiOjYxNDUxLCJxdWFsaXR5IjozfV19LHsibmFtZSI6IlJhdHRsZWJyaXRjaCIsIml0ZW1zIjpbeyJpZCI6NjEyODEsInF1YWxpdHkiOjR9XX0seyJuYW1lIjoiQW5nZWxyaXBwZXJoIiwiaXRlbXMiOlt7ImlkIjo2MTI4NCwicXVhbGl0eSI6NH1dfSx7Im5hbWUiOiJBbGRpd2FycmlvciIsIml0ZW1zIjpbeyJpZCI6NjE0NDMsInF1YWxpdHkiOjR9XX0seyJuYW1lIjoiU3ViYmVyIiwiaXRlbXMiOlt7ImlkIjo4NTQ3LCJxdWFsaXR5IjozfV19XSwiaGFyZHJlc2VydmVzIjpbXX0=")
+    editBoxImport:SetText("eyJtZXRhZGF0YSI6eyJpZCI6IjdCWlJRQSIsImluc3RhbmNlIjo5NCwiaW5zdGFuY2VzIjpbIkJsYWNrd2luZyBMYWlyIl0sIm9yaWdpbiI6InJhaWRyZXMifSwic29mdHJlc2VydmVzIjpbeyJuYW1lIjoiU3ViYmVyIiwiaXRlbXMiOlt7ImlkIjoxNjkxMSwicXVhbGl0eSI6NCwic3JfcGx1cyI6MjB9LHsiaWQiOjE2OTExLCJxdWFsaXR5Ijo0LCJzcl9wbHVzIjoyMH1dfSx7Im5hbWUiOiJSZWlsbG9zIiwiaXRlbXMiOlt7ImlkIjoxNjk1MSwicXVhbGl0eSI6NCwic3JfcGx1cyI6MTB9LHsiaWQiOjE2OTUyLCJxdWFsaXR5Ijo0fV19XSwiaGFyZHJlc2VydmVzIjpbeyJpZCI6MTY5MTAsInF1YWxpdHkiOjR9XX0=")
 
     -- What will happen ehen escape is pressed.
     editBoxImport:SetScript("OnEscapePressed", function()
@@ -292,7 +354,8 @@ local editBoxImport = CreateFrame("EditBox", "RollForImport", ImportScrollFrame)
             if (text) and (text ~= "") then
                 --decode_base64(text);
                 --ConvertRollForText(text);
-                DecodeBase64TextFromRollFor(text)
+                --DecodeBase64TextFromRollFor(text)
+                SendMetaDataToCheckForPlus(text)
             end
 
             -- Clear focus from editBox.
@@ -391,7 +454,7 @@ editBoxExport = CreateFrame("EditBox", "RollForExport", ExportScrollFrame);
         DicordImport:SetPoint("TOPLEFT", ExportMainFrame, "BOTTOMLEFT", 0, 0);
         DicordImport:SetText("Import from Discord");
         DicordImport:SetScript("OnClick", function()
-            -- Open the window for Discord import.
+            -- Open the window for Discord export.
         end);
 
     -- Discord export.
