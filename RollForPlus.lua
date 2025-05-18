@@ -41,10 +41,10 @@ end
 
 
 -- ====================================================================================================
--- =                        Convert the RollFor text to all all the plus roll.                        =
+-- =                     Convert the RollFor text to to a table we can work with.                     =
 -- ====================================================================================================
 
--- Function to decode Base64 encoded text from a "RollFor" string (likely a custom function name)
+-- Function to decode Base64 encoded text from a "RollFor" string.
 local function DecodeBase64TextFromRollFor(textString)
 
   -- String containing all valid Base64 characters
