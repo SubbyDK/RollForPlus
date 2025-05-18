@@ -384,9 +384,25 @@ editBoxExport = CreateFrame("EditBox", "RollForExport", ExportScrollFrame);
 
         end);
 
+    -- Discord import.
+    local DicordImport = CreateFrame("Button", nil, RollForPlusMainFrame, "UIPanelButtonTemplate");
+        DicordImport:SetWidth(120);
+        DicordImport:SetHeight(18);
+        DicordImport:SetPoint("TOPLEFT", ExportMainFrame, "BOTTOMLEFT", 0, 0);
+        DicordImport:SetText("Import from Discord");
+        DicordImport:SetScript("OnClick", function()
+            -- Open the window for Discord import.
+        end);
 
-
-
+    -- Discord export.
+    local DicordExport = CreateFrame("Button", nil, RollForPlusMainFrame, "UIPanelButtonTemplate");
+        DicordExport:SetWidth(110);
+        DicordExport:SetHeight(18);
+        DicordExport:SetPoint("TOPLEFT", DicordImport, "TOPRIGHT", 10, 0);
+        DicordExport:SetText("Export to Discord");
+        DicordExport:SetScript("OnClick", function()
+            -- Open the window for Discord export.
+        end);
 
 
 
