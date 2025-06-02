@@ -5,7 +5,8 @@
 ## DefaultState: enabled
 ## Dependencies: RollFor
 ## Notes: Add a plus on same soft resrve.
-## X-Website: https://github.com/pepopo978/BigWigs/
+## X-Website: https://github.com/SubbyDK/RollForPlus/
+## X-Category: Raid
 
 ## SavedVariables: 
 ## SavedVariablesPerCharacter: PlusTableDB
